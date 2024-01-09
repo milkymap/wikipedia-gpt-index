@@ -1,0 +1,10 @@
+click 
+
+pyzmq
+sentence-transformers
+
+tqdm
+pydantic
+python-telegram-bot
+
+openai
