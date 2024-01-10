@@ -28,14 +28,29 @@ class LLModel:
                     {context}
                     ###
                 USER/ASSISTANT FLOW:
-                             |--> greeting --> assistant --> reply greeting
-                             |--> ask information about your role --> assistant --> present yourself
-                             |--> ask information about the context --> try the build the response if there is one else tell the user that you was not able to build the response 
-                             |--> talk about forbidden topics --> assistant --> tell the user that your scope is limited to this document
+                    |user --> greeting --> assistant --> reply greeting
+                    |user --> ask information about your role --> assistant --> present yourself
+                    |user --> ask a summary of the page --> call the corresponding tools (function_calling) 
+                    |user --> ask questions about given the context --> try the build the response if there is one else tell the user that you was not able to build the response 
+                    |user --> talk about forbidden topics --> assistant --> tell the user that your scope is limited to this document
                 IMPORTANT:
                     FORBIDDEN-TOPICS={self.forbidden_topics}
             """
         )
+
+    def _summary_fn_schema(self): 
+        return {
+            'type': 'function',
+            'function': {
+                'name': 'get_wikipedia_page_summary',
+                'description': 'return the summary of the page',
+                'parameters': {
+                    'type': 'object', 
+                    'properties': {
+                    }
+                }
+            }
+        }
 
     def _build_messages(self, query:str, memory:List[Message]) -> List[Dict[str, str]]:
         user_message = Message(
@@ -50,6 +65,7 @@ class LLModel:
         completion = self.client.chat.completions.create(
             model=self.model_name,
             messages=messages,
+            tools=[self._summary_fn_schema()],
             stream=True
         )
         return completion

@@ -49,7 +49,7 @@ def build_index_from_wikipedia(ctx:click.core.Context, url:str, embedding_model_
 
     wikipedia.set_lang(prefix=language)
     page = wikipedia.page(title=page_title)
-    page_resource = WikiResource(links=page.links, images=page.images, content=page.content)
+    page_resource = WikiResource(links=page.links, images=page.images, content=page.content, summary=page.summary)
 
     logger.info('compute embeddings')
     embedder = Embedding(embedding_model_name, cache_folder, device, tokenizer_model_name)

@@ -19,6 +19,9 @@ class Conversation:
 
     def run_loop(self, memory_size:int, chunk_size:int, context_size:int):
         memory:List[Message] = []
+        fn_name = '' 
+        fn_args = ''
+
         while True:
             try:
                 memory = memory[-memory_size:]  # keep tracking last 5 messages 
@@ -38,7 +41,22 @@ class Conversation:
 
                 accumulator:List[str] = []
                 for chunk in stream:
-                    chunk_content = chunk.choices[0].delta.content or ''
+                    tool_calls = chunk.choices[0].delta.tool_calls
+                    chunk_content = chunk.choices[0].delta.content
+                    
+                    if tool_calls is not None:
+                        function = tool_calls[0].function
+                        if function is not None:
+                            fn_name = fn_name + (function.name or '')
+                            fn_args = fn_args + (function.arguments or '')
+                    
+                    if chunk.choices[0].finish_reason == 'tool_calls':
+                        print('call', fn_name, fn_args)
+                        fn_name, fn_args = '', ''
+
+                    if chunk_content is None:
+                        continue
+
                     print(chunk_content, end='', flush=True)
                     accumulator.append(chunk_content)
                 
