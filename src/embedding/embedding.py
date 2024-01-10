@@ -1,5 +1,6 @@
 import numpy as np 
 
+from tqdm import tqdm
 
 from typing import List, Tuple, Dict 
 
@@ -18,10 +19,10 @@ class Embedding:
         self.codec = encoding_for_model(model_name=tokenizer_model_name)
     
     def vectorize(self, chunks:List[str]) -> List[float]:
-        vectors = self.model.encode(sentences=chunks)
+        vectors = self.model.encode(sentences=chunks, show_progress_bar=False)
         if len(vectors) == 1:
             return vectors[0].tolist()
-        fingerprint = np.mean(vectors)
+        fingerprint:np.ndarray = np.mean(vectors, axis=0)
         return fingerprint.tolist()
     
     def tokenize(self, text:str, chunk_size:int) -> List[str]:
@@ -42,7 +43,7 @@ class Embedding:
     
     def corpus_embedding(self, corpus:List[str], chunk_size:int) -> Knowledge:
         items:List[KnowledgeItem] = []
-        for text in corpus:
+        for text in tqdm(corpus):
             fingerprint = self.text_embedding(text=text, chunk_size=chunk_size)
             items.append(
                 KnowledgeItem(

@@ -1,3 +1,3 @@
 
 
-from src.cli.index import build_index
+from src.cli.wikipedia import build_index_from_wikipedia

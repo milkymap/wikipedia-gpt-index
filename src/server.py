@@ -19,7 +19,9 @@ import asyncio
 
 from deep_translator import GoogleTranslator
 
-from typing import Dict, List, Optional, Iterable
+from urllib.parse import urlparse
+
+from typing import Dict, List, Optional, Iterable, Tuple 
 from glob import glob 
 
 from openai.types.chat import ChatCompletionChunk
@@ -34,6 +36,13 @@ from telegram.ext import (
     MessageHandler
 )
 from os import path 
+
+from src.embedding import Embedding
+from src.schema.knowledge import Knowledge, KnowledgeItem
+from src.schema.wikipedia import WikiResource
+
+import wikipedia
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
 )
@@ -49,39 +58,27 @@ class BOTServer:
         self.user2conversation:Dict[str, List[Dict[str, str]]] = {}
         self.application = Application.builder().token(token).build()
         self.ctx = zmq.Context()
-    
-    def _retrieve_capture(self) -> bytes:
-        dealer_socket:zmq.Socket = self.ctx.socket(zmq.DEALER)
-        dealer_socket.connect(self.endpoint)
-
-        dealer_socket.send_multipart([b'', b''])
-        _, binarystream = dealer_socket.recv_multipart()
-        dealer_socket.close(linger=0)
-        return binarystream
-
+        
     async def start(self, update:Update, context:ContextTypes.DEFAULT_TYPE):
         user = update.message.from_user
-        
         logger.debug(f'{user.first_name} is connected')
-        if user.first_name not in self.user2conversation:
-            self.user2conversation[user.first_name] = []
+        self.user2conversation[user.first_name] = []
         await update.message.reply_text(text=f"Hello {user.first_name}")
         return 0 
-    
     
     async def chatting(self, update:Update, context:ContextTypes.DEFAULT_TYPE):
         user = update.message.from_user
         text = update.message.text
+        if text == "create-index":
+            await update.message.reply_text(text="cool, lets create the index, please give us a wikipedia url")
+            return 1 
         return 0 
-    
-    async def capture(self, update:Update, context:ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(text="ok, voici une capture de l'état actuel")
-        loop = asyncio.get_event_loop()
-        binarystream = await loop.run_in_executor(None, self._retrieve_capture)
-        buffer = pickle.loads(binarystream)
-        photo = BytesIO(buffer)
-        caption = datetime.now()
-        await update.message.reply_photo(photo=photo, caption=f'{caption}')
+
+    async def handle_url(self, update:Update, context:ContextTypes.DEFAULT_TYPE):
+        user = update.message.from_user
+        text = update.message.text
+        await update.message.reply_text(text="thanks for the url, index will be created soon")
+        await update.message.reply_text(text="use /monitor <index_id> to track the progression")
         return 0
     
     async def stop(self, update:Update, context:ContextTypes.DEFAULT_TYPE):
@@ -106,7 +103,8 @@ class BOTServer:
             handler = ConversationHandler(
                 entry_points=[CommandHandler('start', self.start)],
                 states={
-                    0: [CommandHandler('stop', self.stop), CommandHandler('capture', self.capture), MessageHandler(filters.TEXT|filters.VOICE|filters.PHOTO, self.chatting)],
+                    0: [CommandHandler('stop', self.stop), MessageHandler(filters.TEXT, self.chatting)],
+                    1: [CommandHandler('stop', self.stop), MessageHandler(filters.TEXT, self.handle_url)]
                 },
                 fallbacks=[CommandHandler('stop', self.stop)]
             )
