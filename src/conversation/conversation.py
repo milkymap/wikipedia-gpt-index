@@ -9,7 +9,7 @@ from typing import List
 
 from src.schema.retrieval import Message, Role
 
-
+from src.log import logger 
 
 class Conversation:
     def __init__(self, embedder:Embedding, index:Index, language_model:LLModel):
