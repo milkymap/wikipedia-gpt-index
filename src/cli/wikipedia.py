@@ -13,9 +13,9 @@ from src.schema.wikipedia import WikiResource
 from src.schema.retrieval import Message, Role
 
 from src.embedding import Embedding
-
 from src.index import Index
 from src.retrieval import LLModel
+from src.conversation import Conversation
 
 from src.log import logger 
 
@@ -23,13 +23,17 @@ from src.log import logger
 @click.option('--url', type=str, help='url to wikipedia page', required=True)
 @click.option('--embedding_model_name', type=str, required=True)
 @click.option('--tokenizer_model_name', type=str, default='gpt-3.5-turbo')
+@click.option('--paragraph_size', default=384)
 @click.option('--chunk_size', default=128)
 
 @click.option('--llm_name', type=str, default='gpt-3.5-turbo')
 @click.option('--description', type=str, required=True)
 @click.option('--forbidden_topics', type=str, help='list of topics separated by #')
+
+@click.option('--context_size', help='nb paragraphs to retrieve', default=3)
+@click.option('--memory_size', default=5, help='nb past messages to keep')
 @click.pass_context
-def build_index_from_wikipedia(ctx:click.core.Context, url:str, embedding_model_name:str, tokenizer_model_name:str, chunk_size:int ,llm_name:str, description:str, forbidden_topics:str):
+def build_index_from_wikipedia(ctx:click.core.Context, url:str, embedding_model_name:str, tokenizer_model_name:str, paragraph_size:int ,chunk_size:int ,llm_name:str, description:str, forbidden_topics:str, context_size:int, memory_size:int):
 
     openai_api_key, telegram_token, cache_folder, device = op.itemgetter(
         'openai_api_key', 'telegram_token', 
@@ -49,8 +53,8 @@ def build_index_from_wikipedia(ctx:click.core.Context, url:str, embedding_model_
 
     logger.info('compute embeddings')
     embedder = Embedding(embedding_model_name, cache_folder, device, tokenizer_model_name)
-    chunks = embedder.tokenize(page_resource.content, chunk_size=chunk_size)
-    knowledge = embedder.corpus_embedding(corpus=chunks, chunk_size=chunk_size)
+    paragraphs = embedder.tokenize(page_resource.content, chunk_size=paragraph_size)
+    knowledge = embedder.corpus_embedding(corpus=paragraphs, chunk_size=chunk_size)
     
     logger.info('initialize index and llm')
     index = Index(knowledge=knowledge)
@@ -62,49 +66,6 @@ def build_index_from_wikipedia(ctx:click.core.Context, url:str, embedding_model_
     )
     logger.info('rag:++++++++++')
 
-    # move this into a class : llm_interaction
-    memory:List[Message] = []
-    while True:
-        try:
-            memory = memory[-5:]  # keep tracking last 5 messages 
-
-            query = input('query:')
-            query_embedding = embedder.text_embedding(text=query, chunk_size=chunk_size)
-            query_embedding = np.array(query_embedding)
-            candidates = index.semantic_search(query_embedding, k=5)
-
-            context = "\n###\n".join(candidates)
-            print(context)
-
-            stream = language_model.analyse(
-                query=query,
-                context=context,
-                memory=memory 
-            )
-
-            accumulator:List[str] = []
-            for chunk in stream:
-                chunk_content = chunk.choices[0].delta.content or ''
-                print(chunk_content, end='', flush=True)
-                accumulator.append(chunk_content)
-            
-            print('')
-
-            assistant_response = ''.join(accumulator)
-            memory += [
-                Message(
-                    role=Role.USER,
-                    content=query
-                ),
-                Message(
-                    role=Role.ASSISTANT,
-                    content=assistant_response
-                )
-            ]
-
-        except KeyboardInterrupt:
-            break 
-        except Exception as e:
-            logger.error(e)
-            break 
+    conversation = Conversation(embedder, index, language_model)
+    conversation.run_loop(memory_size, chunk_size, context_size)
     
